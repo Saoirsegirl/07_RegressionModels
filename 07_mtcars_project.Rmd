@@ -1,0 +1,184 @@
+---
+title: "Transmission Choice And Its Impact on MPG"
+author: "Barb Dornseif - Saoirsegirl"
+output: pdf_document
+---
+## Executive Summary  
+Does the choice of transmission in your car impact the Miles Per Gallon (MPG) you should expect? And by how much? Given a data set of 11 elements describing ten performance related design features of 32 automobiles and their associated MPG we must conclude that choice of transmission does has a reliable impact on MPG with slightly more than 90% of confidence that a configuration with preduce this expected result. The following analysis will break down the data and process used to make this detirmination. To add readability all the code and tabular data outputs are attached in the appendix.  
+
+## The Data Set  
+The data set 'mtcars' was compiled from an issue of Motor Trend in 1974 and included as a standard dataset in the R package. Let's load the data and take a quick look at the simple relationships between MPG (with a mean of `r round(mean(mtcars$mpg),2)`) and transmission type as well as the other features to see how correlated they may be.  
+
+```{r laod_data, cache=TRUE, echo=FALSE}
+data(mtcars);  x <- vector(mode = "numeric"); r <- vector(mode = "numeric")
+for (i in 1:11) x <- c(x, class(mtcars[,i]))
+for (j in 1:11) r <- c(r, round(cor(mtcars[j], mtcars$mpg),4))
+#dataSum <- rbind(names(mtcars), x, r) # used in discovery & Appendix
+```  
+We see that all of the features are numeric and their respective correlations to MPG span a wide range both positive and negative. Given that transmission is a type and has no intrinsic numeric value, let's transform the data into a Factor variable so we can separate the transmission types into two separate variables in our subsequent models. This will help us identify the distribution of mpg grouped by the transmission type and compare each against the mean of all cars together.  
+
+```{r transform_data, echo=FALSE, cache=TRUE, fig.height=3, fig.width=3.5}
+mtcars$am <- as.factor(mtcars$am)
+levels(mtcars$am) <- c("Automatic", "Manual")
+par(mfrow = c(1,1))
+boxplot(mpg ~ am, data = mtcars, ylab = "MPG - Miles Per Gallon",
+        varwidth = TRUE, col = "light yellow")
+points(mtcars$am, mtcars$mpg, pch=19, col= mtcars$am)
+abline(h = mean(mtcars$mpg), col='blue', lwd = 3)
+fitTrans <- lm(mpg ~ am, data = mtcars)
+```  
+
+We can clearly see that while there is a distinct difference in the means for each transmission type, straddling the mean of all cars. The 25% of values that are greater than or less than the mean - the interquartile range - overlap significantly. This suggests that one or more of the nine other design features must have an impact on MPG. But it is unlikely that all variables are descriptive and the more design choices we consider, the more difficult it is to understand which design choices are most impactful on MPG. Running a model on all variables will tell us alot, so let's start there.
+
+## Fitting The Linear Model
+```{r fitting_lm, cache = TRUE, echo = FALSE, fig.height=3.5, fig.width=3.5}
+fitAll <- lm(mpg ~ . -1, data = mtcars)
+#summary(fitAll)$coefficients #used during developement
+```  
+First, let's remove the intercept from our model so we can see the change in MPG for each variable more clearly. _lm(mpg ~ . -1, data = mtcars)_  The resulting table of coefficients shows that one variable, wt (weight in 1,000's of pounds), has the highest t-value in the model `r round(summary(fitAll)$coefficient[5,3],2)`.  The t-value is a measure of how untrue the claim that the coeffiecient is zero - or not impactful.  A t-value greater than or equal to ~2 are considered impactful with 95% confidence. Looking at the list (in the Appendix) we see that only one more variable shows a t-value that is worth considering for inclusion (`r round(summary(fitAll)$coefficient[6,3],2)`), so we will take an additive approach. Adding two is easier than subtracting seven to finding our best model.
+
+Adding wt to a simple model gives us the formula _lm(mpg ~ wt * am -1 , data = mtcars)_, and we will compare it to only using weight *lm(mpg ~ wt , data = mtcars)* . Let's see if the resulting model improves our understanding of the impact of design choices on MPG.  
+```{r model_169, cache =TRUE, echo = FALSE, fig.height=3, fig.width=3}
+fitwt <- lm(mpg ~ wt, data = mtcars) 
+fit169 <- lm(mpg ~ wt * am -1 , data = mtcars) # index values for variables used
+# summary(fit169)$coefficients # used for dev and Appendix 
+plot(mtcars$wt, mtcars$mpg, pch=19, main = "Adding Weight")
+points(mtcars$wt, mtcars$mpg, pch=19, col= mtcars$am)
+abline(c(fit169$coeff[2], fit169$coeff[1]), col="Black", lwd=3)
+abline(c(fit169$coeff[3], fit169$coeff[1] + fit169$coeff[4]), col="red", lwd=3)
+abline(c(fitwt$coeff[1], fitwt$coeff[2]), col="blue", lwd=3)
+```  
+```{r model_1679, cache =TRUE, echo = FALSE, fig.height=3.5, fig.width=4.1}
+fit1679 <- lm(mpg ~ wt + qsec + am -1 , data = mtcars)
+fit167 <- lm(mpg ~ wt + qsec, data = mtcars)
+library(scatterplot3d)
+s3d <- scatterplot3d(x = mtcars$wt, z = mtcars$mpg, y = mtcars$qsec, 
+                     main ="Final Model", xlab = "Weight (x1,000 pounds)",
+                     zlab = "MPG", ylab = "Quarter-mile Time")
+s3d$points3d(x = mtcars$wt, z = mtcars$mpg, y = mtcars$qsec, type="h", col = as.numeric(mtcars$am), pch=16)
+s3d$plane3d(Intercept = fit167$coefficient[1],
+            x.coef = fit167$coefficient[2], 
+            y.coef = fit167$coefficient[3], lty.box = "dashed")
+```  
+```{r residuals, echo=FALSE, eval=FALSE}
+fit1679.res = resid(fit1679)
+plot(mtcars$mpg, fit1679.res, ylab="Residuals", xlab="MPG", main="Model lm(mpg ~ wt + qsec + am -1)") 
+abline(0, 0)                  # the horizon
+```
+The plot on the left shows us that when a car has a manual transmission (red line and dots), it is much more impacted by increases in weight with a decrease of ~9 MPG per 1,000 pounds. Whereas an automatic (in black) will lose only 3.8 MPG per 1,000 pounds. The blue line represents the change related only to weight. This graph clearly shows that larger cars will naturally want to having automatic transmissions at around 3,000 pounds to decrease this effect and thus their MPG as a group will be lower based on their size more than the type of transmission they have.
+
+The second variable *qsec* is a measurement of time it takes to cover a quarter mile of road.  This is a complex variable as it takes into account a host of design choices - but basically faster means more energy is required to cover the distance and thus MPG is lower overall. or more simply Slower = Better MPG. By adding this variable we lower the residual variance of the model and explain a few of the outliers in our simpler am + wt model. Smaller fast cars vs. small economy cars and heavy sports cars vs. big trucks. 
+
+The graph on the right shows the three numeric variable with the data points colored by transmission type. The 3-dimensional slope plane is akin to the blue line on the left with the _qsec_ impact added to it. This model has a residual sum of squares - the measure of how our model explains the data in total - that is better than our transmission only or weight + transmission models. In fact it is more descriptive than our overly complex ten variable model (which doesn't graph well!)  So we will stick with this model to evaluate the impact of transmission on MPG.   
+
+## Confidence of Our Prediction  
+If we use our model to predict MPG given a set of values for weight and quarter-mile time (we used the mean of both), we will get an answer and a range of values that explains the range of possible MPG values within the expected variance of the model. Depending on how confident we want to be that the range will include the truth, the range will be narrower or wider. For us to declare that transmission does have a clear impact on MPG, the ranges should NOT overlap.  
+
+We see that our model says that at a 95% confidence transmission fails the overlap test - so we must conclude that tranmission type does not reliably impact MPG. However, if we lower our expectations, we see that at 90% confidence, it does pass the test - with no overlap to the estimated MPG for our test Automobile.
+
+```{r prediction, cache=TRUE, echo=FALSE, fig.height=3 }
+wtAve <- mean(mtcars$wt)
+qsecAve <- mean(mtcars$qsec)
+newdataM = data.frame(am="Manual", wt=wtAve, qsec=qsecAve)
+newdataA = data.frame(am="Automatic", wt=wtAve, qsec=qsecAve)
+manRange95 <- predict(fit1679, newdataM, interval="confidence", level = .95) 
+autoRange95 <-predict(fit1679, newdataA, interval="confidence", level = .95)
+manRange90 <-predict(fit1679, newdataM, interval="confidence", level = .90) 
+autoRange90 <- predict(fit1679, newdataA, interval="confidence", level = .90) 
+par(mfcol = c(1,2))
+d95 <- data.frame(rbind(manRange95[1:3], autoRange95[1:3]))
+d95 <- cbind(c("Manual","Automatic"), d95)
+colnames(d95) <- c("Transmission", "Fit","Min","Max")
+library(ggplot2) ; library(gridExtra)
+plot1 <- ggplot(d95, aes(x=Transmission, ymin=Min, lower=Min,fill=Transmission, middle=Fit, upper=Max, ymax=Max)) + 
+    geom_boxplot(stat="identity") + scale_fill_manual(values=c("black", "red")) +
+    labs(title="95% Confidence")
+
+d90 <- data.frame(rbind(manRange90[1:3], autoRange90[1:3]))
+d90 <- cbind(c("Manual","Automatic"), d90)
+colnames(d90) <- c("Transmission", "Fit","Min","Max")
+plot2 <- ggplot(d90, aes(x=Transmission, ymin=Min, lower=Min,fill=Transmission, middle=Fit, upper=Max, ymax=Max)) + 
+    geom_boxplot(stat="identity") + scale_fill_manual(values=c("black", "red")) +
+    labs(title="90% Confidence")
+grid.arrange(plot1, plot2, ncol=2)
+```  
+
+##Appendix  
+Here are the code blocks that generated the above paper, with the echo=FALSE and/or eval=FALSE removed, and with the # notation removed to allow tabled data to be presented.  Where a code block will reprint a graph, the code has been ## - commented out below to avoid redundancy.
+```{r laod_dataA, cache=TRUE}
+data(mtcars);  x <- vector(mode = "numeric"); r <- vector(mode = "numeric")
+for (i in 1:11) x <- c(x, class(mtcars[,i]))
+for (j in 1:11) r <- c(r, round(cor(mtcars[j], mtcars$mpg),4))
+dataSum <- rbind(names(mtcars), x, r) # # removed for Appendix
+```  
+
+```{r transform_dataA, cache=TRUE, eval=FALSE, fig.height=3, fig.width=3.5}
+mtcars$am <- as.factor(mtcars$am)
+levels(mtcars$am) <- c("Automatic", "Manual")
+par(mfrow = c(1,1))
+## boxplot(mpg ~ am, data = mtcars, ylab = "MPG - Miles Per Gallon",
+        varwidth = TRUE, col = "light yellow")
+points(mtcars$am, mtcars$mpg, pch=19, col= mtcars$am)
+abline(h = mean(mtcars$mpg), col='blue', lwd = 3)
+fitTrans <- lm(mpg ~ am, data = mtcars)
+```  
+
+```{r fitting_lmA, cache = TRUE, fig.height=3.5, fig.width=3.5}
+fitAll <- lm(mpg ~ . -1, data = mtcars)
+summary(fitAll)$coefficients #used during developement
+``` 
+
+```{r model_169A, cache =TRUE, fig.height=3, fig.width=3}
+fitwt <- lm(mpg ~ wt, data = mtcars) 
+fit169 <- lm(mpg ~ wt * am -1 , data = mtcars) # index values for variables used
+summary(fit169)$coefficients # used for dev and Appendix
+## plot(mtcars$wt, mtcars$mpg, pch=19, main = "Adding Weight")
+## points(mtcars$wt, mtcars$mpg, pch=19, col= mtcars$am)
+## abline(c(fit169$coeff[2], fit169$coeff[1]), col="Black", lwd=3)
+## abline(c(fit169$coeff[3], fit169$coeff[1] + fit169$coeff[4]), col="red", lwd=3)
+## abline(c(fitwt$coeff[1], fitwt$coeff[2]), col="blue", lwd=3)
+```  
+```{r model_1679A, cache =TRUE, echo = FALSE, fig.height=3.5, fig.width=4.1}
+fit1679 <- lm(mpg ~ wt + qsec + am -1 , data = mtcars)
+fit167 <- lm(mpg ~ wt + qsec, data = mtcars)
+library(scatterplot3d)
+## s3d <- scatterplot3d(x = mtcars$wt, z = mtcars$mpg, y = mtcars$qsec, 
+                     ## main ="Final Model", xlab = "Weight (x1,000 pounds)",
+                     ## zlab = "MPG", ylab = "Quarter-mile Time")
+## s3d$points3d(x = mtcars$wt, z = mtcars$mpg, y = mtcars$qsec, type="h", col = as.numeric(mtcars$am), pch=16)
+## s3d$plane3d(Intercept = fit167$coefficient[1], x.coef = fit167$coefficient[2], 
+            ## y.coef = fit167$coefficient[3], lty.box = "dashed")
+```  
+```{r residualsA, fig.height=3.5}
+fit1679.res = resid(fit1679)
+## plot(mtcars$mpg, fit1679.res, ylab="Residuals", xlab="MPG", main="Model lm(mpg ~ wt + qsec + am -1)") 
+## abline(0, 0)                  # the horizon
+```  
+```{r predictionA, cache=TRUE, fig.height=3 }
+wtAve <- mean(mtcars$wt)
+qsecAve <- mean(mtcars$qsec)
+newdataM = data.frame(am="Manual", wt=wtAve, qsec=qsecAve)
+newdataA = data.frame(am="Automatic", wt=wtAve, qsec=qsecAve)
+manRange95 <- predict(fit1679, newdataM, interval="confidence", level = .95) 
+autoRange95 <-predict(fit1679, newdataA, interval="confidence", level = .95)
+manRange90 <-predict(fit1679, newdataM, interval="confidence", level = .90) 
+autoRange90 <- predict(fit1679, newdataA, interval="confidence", level = .90) 
+par(mfcol = c(1,2))
+d95 <- data.frame(rbind(manRange95[1:3], autoRange95[1:3]))
+d95 <- cbind(c("Manual","Automatic"), d95)
+colnames(d95) <- c("Transmission", "Fit","Min","Max")
+print(d95)
+library(ggplot2) ; library(gridExtra)
+plot1 <- ggplot(d95, aes(x=Transmission, ymin=Min, lower=Min,fill=Transmission, middle=Fit, upper=Max, ymax=Max)) + 
+    geom_boxplot(stat="identity") + scale_fill_manual(values=c("black", "red")) +
+    labs(title="95% Confidence")
+
+d90 <- data.frame(rbind(manRange90[1:3], autoRange90[1:3]))
+d90 <- cbind(c("Manual","Automatic"), d90)
+colnames(d90) <- c("Transmission", "Fit","Min","Max")
+print(d90)
+plot2 <- ggplot(d90, aes(x=Transmission, ymin=Min, lower=Min,fill=Transmission, middle=Fit, upper=Max, ymax=Max)) + 
+    geom_boxplot(stat="identity") + scale_fill_manual(values=c("black", "red")) +
+    labs(title="90% Confidence")
+## grid.arrange(plot1, plot2, ncol=2)
+```  
